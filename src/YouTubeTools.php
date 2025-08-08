@@ -85,12 +85,17 @@ class YouTubeTools
 
     public function downloadOnly(string $url, string $outputDir): array
     {
-        $randomName = 'source_' . mt_rand(100000, 999999);
-        $outputTemplate = "{$this->tempDir}/{$randomName}.%(ext)s";
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir, 0777, true);
+        }
+
+        $randomName = 'clip_' . mt_rand(100000, 999999);
+        $outputTemplate = "{$outputDir}/{$randomName}.%(ext)s";
 
         $downloadCmd = sprintf('yt-dlp %s --user-agent=%s -f "bv*+ba/b" -o %s --merge-output-format mp4 %s 2>&1', $this->cookiesFile ? '--cookies ' . escapeshellarg($this->cookiesFile) : '', escapeshellarg($this->userAgent), escapeshellarg($outputTemplate), escapeshellarg($url));
 
         exec($downloadCmd, $ytOutput, $ytStatus);
+
         if ($ytStatus !== 0) {
             return [
                 'status' => false,
@@ -99,30 +104,25 @@ class YouTubeTools
             ];
         }
 
-        $videoPath = "{$this->tempDir}/{$randomName}.mp4";
-        if (!file_exists($videoPath)) {
-            return ['status' => false, 'error' => 'Downloaded file not found'];
+        // Find the mp4 file in outputDir
+        $downloadedFile = null;
+        foreach (glob("{$outputDir}/{$randomName}.*") as $file) {
+            if (pathinfo($file, PATHINFO_EXTENSION) === 'mp4') {
+                $downloadedFile = $file;
+                break;
+            }
         }
 
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0777, true);
-        }
-
-        $outputPath = sprintf('%s/clip_%02d.mp4', $outputDir, 1);
-        $ffmpegCmd = sprintf('ffmpeg -i %s -c:a copy -y %s 2>&1', escapeshellarg($videoPath), escapeshellarg($outputPath));
-
-        exec($ffmpegCmd, $ffmpegOutput, $ffmpegStatus);
-
-        if ($ffmpegStatus === 0 && file_exists($outputPath)) {
+        if ($downloadedFile && file_exists($downloadedFile)) {
             return [
                 'status' => true,
-                'path' => realpath($outputPath),
+                'path' => realpath($downloadedFile),
             ];
         }
 
         return [
             'status' => false,
-            'error' => 'Failed to download video',
+            'error' => 'Downloaded file not found',
         ];
     }
 
@@ -144,14 +144,14 @@ class YouTubeTools
         exec($ffmpegCmd, $ffmpegOutput, $ffmpegStatus);
 
         if ($ffmpegStatus === 0 && file_exists($outputPath)) {
-            $path= realpath($outputPath);
+            $path = realpath($outputPath);
         } else {
             print_r($ffmpegOutput);
         }
 
         return [
             'status' => true,
-            'path' => $path
+            'path' => $path,
         ];
     }
 }
